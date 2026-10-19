@@ -10,3 +10,5 @@ pytesseract==0.3.13
 Pillow==11.2.1
 streamlit==1.45.1
 requests==2.32.3
+scikit-learn==1.8.0
+joblib==1.5.3

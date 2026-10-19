@@ -67,6 +67,10 @@ services:
       CLASSIFICATION_THRESHOLD: "0.70"
     ports:
       - "8082:8080"
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./artifacts:/app/artifacts
 
   ui:
     build: .

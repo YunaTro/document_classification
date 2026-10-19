@@ -133,3 +133,18 @@ python -m pytest -q
 ## Оговорки
 
 Это учебный локальный прототип. Настройки безопасности, пароли, квоты, доступ к API, ролевая модель пользователей и защита данных должны быть усилены перед реальным развёртыванием. Порты отличаются от предыдущего проекта, чтобы не конфликтовать с ним. В SQL уже заложена история результатов нескольких моделей, но сами модели не реализованы в этом этапе.
+
+# 1. Пересобрать API с новыми зависимостями и скриптами
+docker compose build api
+
+# 2. Создать 240 документов DOCX
+docker compose run --rm --no-deps api python -m scripts.generate_documents
+
+# 3. Подготовить обучающую, валидационную и тестовую выборки
+docker compose run --rm --no-deps api python -m scripts.prepare_dataset
+
+# 4. Обучить первый классификатор
+docker compose run --rm --no-deps api python -m scripts.train_tfidf
+
+# 5. Проверить предсказание на одном документе
+docker compose run --rm --no-deps api python -m scripts.predict_tfidf --file data/raw/invoice/invoice-tpl06__00.docx

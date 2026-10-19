@@ -15,13 +15,9 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from app import db, storage
 from app.config import settings
 from app.loaders import SUPPORTED_EXTENSIONS, load_any
+from app.document_classes import CLASSES
 
 logger = logging.getLogger(__name__)
-
-CLASSES = {
-    "contract": "Договор", "invoice": "Счёт", "act": "Акт",
-    "application": "Заявление", "memo": "Служебная записка", "report": "Отчёт",
-}
 
 
 @asynccontextmanager
