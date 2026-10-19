@@ -1,0 +1,70 @@
+name: document-classification
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: classifier_db
+      POSTGRES_USER: docuser
+      POSTGRES_PASSWORD: docpass
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U docuser -d classifier_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  minio:
+    image: cr.yandex/mirror/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9200:9000"
+      - "9201:9001"
+    volumes:
+      - minio_data:/data
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    environment: &api_env
+      POSTGRES_DSN: postgresql://docuser:docpass@postgres:5432/classifier_db
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_PUBLIC_ENDPOINT_URL: ${S3_PUBLIC_ENDPOINT_URL:-http://localhost:9200}
+      S3_BUCKET: classified-documents
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_REGION: us-east-1
+      ENABLE_OCR: "true"
+      OCR_LANGS: rus+eng
+      OCR_MIN_TEXT_CHARS: "30"
+      MAX_UPLOAD_MB: "20"
+      CLASSIFICATION_THRESHOLD: "0.70"
+    ports:
+      - "8082:8080"
+
+  ui:
+    build: .
+    restart: unless-stopped
+    command: ["streamlit", "run", "ui/streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true"]
+    environment:
+      API_BASE_URL: http://api:8080
+    depends_on:
+      - api
+    ports:
+      - "8512:8501"
+
+volumes:
+  postgres_data:
+  minio_data:

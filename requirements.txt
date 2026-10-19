@@ -1,0 +1,12 @@
+# Первый этап без тяжёлых зависимостей ML; они появятся на этапе обучения.
+fastapi==0.115.12
+uvicorn[standard]==0.34.3
+python-multipart==0.0.20
+boto3==1.38.27
+psycopg[binary]==3.2.9
+PyMuPDF==1.26.0
+python-docx==1.2.0
+pytesseract==0.3.13
+Pillow==11.2.1
+streamlit==1.45.1
+requests==2.32.3
