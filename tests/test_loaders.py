@@ -1,4 +1,4 @@
-"""Автономные тесты извлечения текста. PostgreSQL/MinIO не требуются."""
+"""Автономные тесты извлечения текста."""
 from dataclasses import replace
 
 import fitz

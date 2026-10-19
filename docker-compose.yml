@@ -1,4 +1,6 @@
+
 name: document-classification
+
 services:
   postgres:
     image: postgres:16
@@ -17,18 +19,27 @@ services:
       timeout: 3s
       retries: 15
 
-  minio:
-    image: cr.yandex/mirror/minio/minio:RELEASE.2025-09-07T16-13-09Z
+  rustfs:
+    image: rustfs/rustfs:latest
     restart: unless-stopped
-    command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:?Set RUSTFS_ACCESS_KEY in .env}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:?Set RUSTFS_SECRET_KEY in .env}
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+      RUSTFS_CONSOLE_ENABLE: "true"
+    command: ["/data"]
     ports:
-      - "9200:9000"
-      - "9201:9001"
+      - "127.0.0.1:9200:9000"
+      - "127.0.0.1:9201:9001"
     volumes:
-      - minio_data:/data
+      - rustfs_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
 
   api:
     build: .
@@ -36,16 +47,19 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      minio:
-        condition: service_started
-    environment: &api_env
+      rustfs:
+        condition: service_healthy
+    environment:
       POSTGRES_DSN: postgresql://docuser:docpass@postgres:5432/classifier_db
-      S3_ENDPOINT_URL: http://minio:9000
+
+      S3_ENDPOINT_URL: http://rustfs:9000
       S3_PUBLIC_ENDPOINT_URL: ${S3_PUBLIC_ENDPOINT_URL:-http://localhost:9200}
       S3_BUCKET: classified-documents
-      AWS_ACCESS_KEY_ID: minioadmin
-      AWS_SECRET_ACCESS_KEY: minioadmin
+
+      AWS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY}
       AWS_REGION: us-east-1
+
       ENABLE_OCR: "true"
       OCR_LANGS: rus+eng
       OCR_MIN_TEXT_CHARS: "30"
@@ -57,7 +71,13 @@ services:
   ui:
     build: .
     restart: unless-stopped
-    command: ["streamlit", "run", "ui/streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true"]
+    command:
+      - streamlit
+      - run
+      - ui/streamlit_app.py
+      - --server.port=8501
+      - --server.address=0.0.0.0
+      - --server.headless=true
     environment:
       API_BASE_URL: http://api:8080
     depends_on:
@@ -67,4 +87,4 @@ services:
 
 volumes:
   postgres_data:
-  minio_data:
+  rustfs_data:

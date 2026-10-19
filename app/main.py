@@ -35,7 +35,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="Document Classification & Routing — Stage 1",
-    description="Загрузка, извлечение текста, PostgreSQL и MinIO. Классификация — следующий этап.",
+    description="Загрузка, извлечение текста, PostgreSQL и RustFS. Классификация — следующий этап.",
     version="0.1.0",
     lifespan=lifespan,
 )
