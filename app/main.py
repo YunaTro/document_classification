@@ -16,6 +16,10 @@ from app import db, storage
 from app.config import settings
 from app.loaders import SUPPORTED_EXTENSIONS, load_any
 from app.document_classes import CLASSES
+from typing import Literal
+from pydantic import BaseModel, Field
+
+from app import classification
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +43,22 @@ app = FastAPI(
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "stage": "ingestion", "classification_ready": False}
+    ready = {
+        "tfidf": Path(
+            "models/tfidf_logreg.joblib"
+        ).is_file(),
+        "e5": Path(
+            "models/e5_logreg.joblib"
+        ).is_file(),
+    }
+
+    return {
+        "status": "ok",
+        "stage": "classification_review",
+        "classification_ready": any(ready.values()),
+        "models_ready": ready,
+        "auto_route_enabled": settings.auto_route_enabled,
+    }
 
 
 @app.get("/classes")
@@ -137,6 +156,15 @@ def documents(limit: int = 100):
         raise HTTPException(status_code=422, detail="limit от 1 до 500")
     return db.list_documents(limit=limit)
 
+@app.get("/documents/review-queue")
+def review_queue(limit: int = 100):
+    if not 1 <= limit <= 500:
+        raise HTTPException(
+            status_code=422,
+            detail="limit от 1 до 500",
+        )
+
+    return db.list_review_queue(limit=limit)
 
 @app.get("/documents/{document_id}")
 def document(document_id: UUID):
@@ -159,3 +187,125 @@ def document_download_link(document_id: UUID):
     if not result:
         raise HTTPException(status_code=404, detail="Документ не найден")
     return {"url": storage.presigned_url(result["s3_key"]), "expires_in": 3600}
+
+
+class ReviewRequest(BaseModel):
+    verified_class: Literal[
+        "contract",
+        "invoice",
+        "act",
+        "application",
+        "memo",
+        "report",
+    ]
+    comment: str | None = Field(
+        default=None,
+        max_length=2000,
+    )
+
+
+@app.get("/models")
+def models():
+    return [
+        {
+            "code": "tfidf",
+            "title": "TF-IDF + LogisticRegression",
+        },
+        {
+            "code": "e5",
+            "title": "multilingual-e5-small + LogisticRegression",
+        },
+    ]
+
+
+@app.post("/documents/{document_id}/classify")
+def classify_document(
+    document_id: UUID,
+    model: Literal["tfidf", "e5"] = "tfidf",
+):
+    existing = db.get_document(str(document_id))
+
+    if existing is None:
+        raise HTTPException(
+            404, "Документ не найден"
+        )
+
+    if existing["verified_class"] is not None:
+        raise HTTPException(
+            409, "Класс уже подтверждён"
+        )
+
+    if not existing["extracted_text"].strip():
+        raise HTTPException(
+            422, "Из документа не удалось извлечь текст"
+        )
+
+    try:
+        prediction = classification.predict(
+            existing["extracted_text"],
+            model,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(503, str(exc)) from exc
+    except Exception as exc:
+        logger.exception(
+            "Ошибка модели %s", model
+        )
+        raise HTTPException(
+            503, "Не удалось выполнить классификацию"
+        ) from exc
+
+    try:
+        result = db.save_classification(
+            str(document_id),
+            prediction,
+            settings.classification_threshold,
+            settings.auto_route_enabled,
+        )
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+    if result is None:
+        raise HTTPException(
+            404, "Документ не найден"
+        )
+
+    return {
+        **result,
+        "document_id": str(document_id),
+        "threshold": settings.classification_threshold,
+    }
+
+
+@app.get("/documents/{document_id}/classifications")
+def classification_history(document_id: UUID):
+    if not db.get_document(str(document_id)):
+        raise HTTPException(
+            404, "Документ не найден"
+        )
+
+    return db.get_classification_history(
+        str(document_id)
+    )
+
+
+@app.post("/documents/{document_id}/review")
+def review_document(
+    document_id: UUID,
+    request: ReviewRequest,
+):
+    try:
+        result = db.confirm_classification(
+            str(document_id),
+            request.verified_class,
+            request.comment,
+        )
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+    if result is None:
+        raise HTTPException(
+            404, "Документ не найден"
+        )
+
+    return result

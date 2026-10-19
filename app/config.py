@@ -53,6 +53,10 @@ class Settings:
     classification_threshold: float = float(
         os.getenv("CLASSIFICATION_THRESHOLD", "0.70")
     )
+    auto_route_enabled: bool = (
+        os.getenv("AUTO_ROUTE_ENABLED", "false").lower()
+        == "true"
+    )
 
 
 settings = Settings()

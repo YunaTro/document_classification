@@ -14,7 +14,8 @@ client = TestClient(main.app)
 def test_health():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["classification_ready"] is False
+    assert "models_ready" in response.json()
+    assert response.json()["stage"] == "classification_review"
 
 
 def test_classes():

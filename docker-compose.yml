@@ -51,6 +51,8 @@ services:
         condition: service_healthy
     environment:
       POSTGRES_DSN: postgresql://docuser:docpass@postgres:5432/classifier_db
+      HF_HOME: /app/models/hf_cache
+      AUTO_ROUTE_ENABLED: "false"
 
       S3_ENDPOINT_URL: http://rustfs:9000
       S3_PUBLIC_ENDPOINT_URL: ${S3_PUBLIC_ENDPOINT_URL:-http://localhost:9200}
